@@ -1,54 +1,72 @@
-# Hybrid Search Mini Project (BM25 + Vector with RRF)
+# Grounded Ask Mini Project
 
-A tiny, self-contained mini project: fuse keyword and semantic search with **Reciprocal Rank Fusion (RRF)** and prove the hybrid beats each search alone. **No database or API keys needed** — each system's ranked results are provided as data.
+A grounded Q&A endpoint demonstrating evidence retrieval with PostgreSQL pgvector, bounded context assembly, evidence-only generation, and citation verification.
 
-## Files
-
-- `hybrid-eval.js` — the file you build (four TODOs; loading is done for you).
-- `test-set.csv` — 10 `(query, correct_post_ids)` pairs. Multiple correct ids are `;`-separated.
-- `search-results.json` — each system's **top-20** ranked `post_id` list per query: `{ "<query>": { "keyword": [...], "semantic": [...] } }`. Array position 0 is rank 1.
-- `posts-dataset.csv` — the 35 posts the ids refer to (for sanity-checking only).
-
-## What to build in `hybrid-eval.js`
-
-1. `rrfFuse(keywordIds, semanticIds, k = 60)` — merge two ranked lists into one. A doc's score is the sum of `1 / (k + rank)` over each list it appears in (rank is 1-based); sort by score, highest first.
-2. `rankOf(ids, correctIds, cutoff)` — 1-based rank of the first correct id, or `null`.
-3. For each query, build the hybrid list and record reciprocal rank + a recall@10 hit for **keyword, semantic, and hybrid**.
-4. Print a markdown table (keyword / semantic / hybrid rank per query, `miss` if not found) with a Summary row of MRR and Recall@10 per system.
-
-## Formulas
-
-```text
-RRF(doc)        = sum over each list of  1 / (k + rank of doc in that list)   [k = 60]
-Reciprocal Rank = 1 / (rank of the first correct answer)   [0 if not found]
-MRR             = average reciprocal rank over all queries
-Recall@10       = (queries whose correct answer is in the top 10) / (total queries)
-```
-
-## Run
+## Setup and commands
 
 ```bash
-node hybrid-eval.js
+npm install
+npm test
+npm start
+# In another terminal, once the server and services are ready:
+npm run questions
 ```
 
-## Answer key
+The four unit tests use stand-ins for the database, embedder, and language model. They do not require PostgreSQL, Redis, or an API key. To run the live endpoint, configure the LU3 `posts_embeddings` table, PostgreSQL with pgvector, Redis, and `OPENAI_API_KEY` in a local `.env` file. Never commit `.env` or real credentials.
 
-A correct solution prints:
+## Implemented helpers
+
+- `retrieve` embeds the query and runs a parameterized cosine-distance query against `posts_embeddings`, filtering by `model_version` and returning no more than five `{ id, text }` rows.
+- `buildContext` validates positive integer IDs and string passage text, preserves each ID as `post_id`, and caps the context at five passages, 1,200 characters per passage, and 6,000 characters total.
+- `generate` sends the question and labelled passages as JSON, instructs the model to use only the evidence and treat passage content as untrusted, sets `max_completion_tokens` to 500, and rejects an empty response.
+- `validateCitations` allows the exact abstention without sources, deduplicates valid cited IDs, and rejects missing or unknown citations.
+
+## Offline test output
+
+Command: `npm test`
 
 ```text
-| Query | Keyword rank | Semantic rank | Hybrid rank |
-|---|---|---|---|
-| my redis cache keeps showing old data | 8 | 1 | 1 |
-| how do I add semantic search to a table I already have | 12 | 2 | 1 |
-| redis or memcached for caching | 1 | 2 | 1 |
-| why did my query get slower after I added an index | 14 | 1 | 2 |
-| what does ACID actually guarantee | 2 | 1 | 1 |
-| how do I keep my postgres online while changing the schema | 6 | 3 | 1 |
-| my background jobs stop after every deploy | 13 | 2 | 2 |
-| how do I let my database accept more writes per second | 4 | 1 | 1 |
-| sql or nosql for a new product | 1 | 3 | 1 |
-| why does my redis memory keep climbing | 15 | 2 | 1 |
-| **Summary** | **MRR 0.33 · Recall@10 0.60** | **MRR 0.67 · Recall@10 1.00** | **MRR 0.90 · Recall@10 1.00** |
+> grounded-ask-mini-project@1.0.0 test
+> node --test test/rag.test.js
+
+TAP version 13
+# Subtest: retrieval passes vector and model as SQL parameters
+ok 1 - retrieval passes vector and model as SQL parameters
+# Subtest: context is bounded and preserves IDs
+ok 2 - context is bounded and preserves IDs
+# Subtest: generation sends evidence contract and labelled text
+ok 3 - generation sends evidence contract and labelled text
+# Subtest: citations are deduplicated, cited only, and constrained to context
+ok 4 - citations are deduplicated, cited only, and constrained to context
+1..4
+# tests 4
+# suites 0
+# pass 4
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
 ```
 
-Hybrid (MRR 0.90) beats keyword (0.33) and semantic (0.67): fusion lifts consensus answers to the top, and because the lists are top-20, it rescues answers keyword buried past rank 10.
+## Five live evaluation questions and responses
+
+**Live results have not been recorded in this build.** Live requests require the learner's populated LU3 database, working PostgreSQL/pgvector and Redis services, and a valid OpenAI key. The items below are the five questions in `questions.js`; run `npm run questions` against that environment and replace each pending response with its actual status, answer, and `sources` array. No live output is invented here.
+
+1. **Answerable —** How is cosine distance calculated for vector similarity in pgvector?  
+   **Response:** Pending live run.
+2. **Answerable —** Why should text embeddings be cached in Redis with a SHA-256 hash?  
+   **Response:** Pending live run.
+3. **Answerable —** What batch size is recommended when embedding posts for pgvector storage?  
+   **Response:** Pending live run.
+4. **Answerable —** How do you perform an idempotent upsert when saving post embeddings in PostgreSQL?  
+   **Response:** Pending live run.
+5. **Unanswerable —** What is the recipe for baking chocolate chip cookies in an air fryer?  
+   **Expected behavior (not a recorded live response):** `{ "answer": "I cannot answer this from the supplied passages.", "sources": [] }` when the retrieved passages do not answer it.
+
+## Interpretation
+
+The offline tests confirm that the retrieval query passes the embedding vector and model version as SQL parameters, while the context builder keeps source IDs attached to bounded passage text. In a live run, I will identify the supported answer by checking the precise source sentence in its returned passage, rather than treating the citation itself as proof. If the corpus does not contain evidence for the cookie question, the correct behavior is to abstain instead of guessing, because an unsupported answer can mislead the user. A 6,000-character limit is not a token budget because tokenization varies with language, punctuation, and content, so the same number of characters can consume different numbers of model tokens. A citation ID only shows that the model named a passage supplied in the prompt; it does not show that the passage entails or verifies the claim.
+
+## Environment and limitations
+
+The answer is only as good as the retrieved evidence and the excerpt included in the prompt. A 1,200-character excerpt can omit relevant information from a longer source post, which can cause abstention even when the full post contains an answer. Citation validation verifies ID membership, not semantic entailment or factual truth. The helper tests are offline checks; they do not measure retrieval quality or establish how the live corpus will answer the five questions.
