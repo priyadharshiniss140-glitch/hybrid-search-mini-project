@@ -1,0 +1,31 @@
+name: Re-embedding pipeline tests
+
+on:
+  pull_request:
+    paths:
+      - "reembedding-pipeline-mini-project/**"
+      - ".github/workflows/reembedding-pipeline-tests.yml"
+  push:
+    branches:
+      - "feat/reembedding-pipeline"
+    paths:
+      - "reembedding-pipeline-mini-project/**"
+      - ".github/workflows/reembedding-pipeline-tests.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: reembedding-pipeline-mini-project
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install
+      - name: Run offline tests
+        run: npm test
