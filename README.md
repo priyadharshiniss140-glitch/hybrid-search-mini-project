@@ -1,29 +1,6 @@
 # Hybrid Search Mini Project (BM25 + Vector with RRF)
 
-A tiny, self-contained mini project: fuse keyword and semantic search with **Reciprocal Rank Fusion (RRF)** and prove the hybrid beats each search alone. **No database or API keys needed** — each system's ranked results are provided as data.
-
-## Files
-
-- `hybrid-eval.js` — the file you build (four TODOs; loading is done for you).
-- `test-set.csv` — 10 `(query, correct_post_ids)` pairs. Multiple correct ids are `;`-separated.
-- `search-results.json` — each system's **top-20** ranked `post_id` list per query: `{ "<query>": { "keyword": [...], "semantic": [...] } }`. Array position 0 is rank 1.
-- `posts-dataset.csv` — the 35 posts the ids refer to (for sanity-checking only).
-
-## What to build in `hybrid-eval.js`
-
-1. `rrfFuse(keywordIds, semanticIds, k = 60)` — merge two ranked lists into one. A doc's score is the sum of `1 / (k + rank)` over each list it appears in (rank is 1-based); sort by score, highest first.
-2. `rankOf(ids, correctIds, cutoff)` — 1-based rank of the first correct id, or `null`.
-3. For each query, build the hybrid list and record reciprocal rank + a recall@10 hit for **keyword, semantic, and hybrid**.
-4. Print a markdown table (keyword / semantic / hybrid rank per query, `miss` if not found) with a Summary row of MRR and Recall@10 per system.
-
-## Formulas
-
-```text
-RRF(doc)        = sum over each list of  1 / (k + rank of doc in that list)   [k = 60]
-Reciprocal Rank = 1 / (rank of the first correct answer)   [0 if not found]
-MRR             = average reciprocal rank over all queries
-Recall@10       = (queries whose correct answer is in the top 10) / (total queries)
-```
+This mini project fuses provided keyword and semantic rankings with Reciprocal Rank Fusion (RRF), then compares keyword, semantic, and hybrid search using MRR and Recall@10. It runs with plain Node.js and needs no database, API keys, or extra packages.
 
 ## Run
 
@@ -31,9 +8,9 @@ Recall@10       = (queries whose correct answer is in the top 10) / (total queri
 node hybrid-eval.js
 ```
 
-## Answer key
+## Results
 
-A correct solution prints:
+Output produced by `node hybrid-eval.js`:
 
 ```text
 | Query | Keyword rank | Semantic rank | Hybrid rank |
@@ -51,4 +28,19 @@ A correct solution prints:
 | **Summary** | **MRR 0.33 · Recall@10 0.60** | **MRR 0.67 · Recall@10 1.00** | **MRR 0.90 · Recall@10 1.00** |
 ```
 
-Hybrid (MRR 0.90) beats keyword (0.33) and semantic (0.67): fusion lifts consensus answers to the top, and because the lists are top-20, it rescues answers keyword buried past rank 10.
+## Interpretation
+
+Hybrid search is best overall, with MRR 0.90—0.23 higher than semantic search's 0.67 and 0.57 higher than keyword search's 0.33—while matching semantic search's perfect Recall@10 of 1.00. For “how do I add semantic search to a table I already have,” keyword ranks the relevant post at 12 and semantic at 2, but RRF promotes it to rank 1 because both lists contribute evidence for the same document. That same query shows why the source rankings include 20 results: the correct post at keyword rank 12 is still available to contribute to the fused score, whereas truncating keyword results at 10 would remove that contribution. Hybrid does not put every answer at rank 1 because the systems sometimes rank competing posts highly, so the correct post's summed score does not always exceed every other document's score.
+
+## How the metrics work
+
+- **RRF:** sums (1/(k+mathrm{rank})) for each document across the input rankings, with 1-based ranks and (k=60).
+- **Reciprocal Rank:** (1/mathrm{rank}) of the first relevant result, or 0 if none is found.
+- **MRR:** mean reciprocal rank over all queries.
+- **Recall@10:** fraction of queries with a correct result in the top 10.
+
+## Input files
+
+- `test-set.csv` contains the test queries and correct post IDs; multiple correct IDs are semicolon-separated.
+- `search-results.json` contains top-20 keyword and semantic result lists for each query.
+- `posts-dataset.csv` provides the underlying post records for sanity-checking.
